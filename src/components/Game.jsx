@@ -1,22 +1,34 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { generatePuzzle, verifyUserExpression } from '../utils/engine';
 import { playClick, playUndo, playCorrect, playWrong, playSkip, playGameOver } from '../utils/sounds';
 
-const MAX_ROUNDS_SINGLE = 20;
+const MAX_ROUNDS = 10; // per session (single) or per player (multi)
 
 export default function Game({ config, setScreen, setFinalStats }) {
   const [currentRound, setCurrentRound] = useState(0);
   const [currentPlayerIdx, setCurrentPlayerIdx] = useState(0);
+  // playerRounds tracks how many rounds each player has completed
+  const [playerRounds, setPlayerRounds] = useState(Array(config.numPlayers).fill(0));
   const [scores, setScores] = useState(Array(config.numPlayers).fill(0));
   const [multiplier, setMultiplier] = useState(1);
+
+  // Single player: track total session elapsed
   const [sessionStartTime] = useState(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+
+  // Multiplayer: track accumulated time (seconds) per player
+  // playerAccTime stores banked seconds from completed turns
+  const [playerAccTime, setPlayerAccTime] = useState(Array(config.numPlayers).fill(0));
+  // turnStartTime is a ref so it doesn't cause re-renders
+  const turnStartRef = useRef(Date.now());
+  // Live ticker for current player's current-turn seconds
+  const [turnElapsed, setTurnElapsed] = useState(0);
 
   const [puzzleDigits, setPuzzleDigits] = useState([]);
   const [expression, setExpression] = useState([]);
   const [toast, setToast] = useState(null);
 
-  // Timer — updates every second
+  // Single player timer
   useEffect(() => {
     if (config.mode !== 'single') return;
     const interval = setInterval(() => {
@@ -25,7 +37,21 @@ export default function Game({ config, setScreen, setFinalStats }) {
     return () => clearInterval(interval);
   }, [config.mode, sessionStartTime]);
 
-  const currentPenalty = Math.floor(elapsedSeconds / 10);
+  // Multiplayer turn timer
+  useEffect(() => {
+    if (config.mode !== 'multi') return;
+    turnStartRef.current = Date.now();
+    setTurnElapsed(0);
+    const interval = setInterval(() => {
+      setTurnElapsed(Math.floor((Date.now() - turnStartRef.current) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [config.mode, currentPlayerIdx]);
+
+  // Derived penalties
+  const singlePenalty = Math.floor(elapsedSeconds / 10);
+  const multiCurrentPlayerTotalSecs = (playerAccTime[currentPlayerIdx] || 0) + turnElapsed;
+  const multiCurrentPenalty = Math.floor(multiCurrentPlayerTotalSecs / 10);
 
   const loadNewPuzzle = useCallback(() => {
     const digits = generatePuzzle(config.difficulty);
@@ -56,10 +82,27 @@ export default function Game({ config, setScreen, setFinalStats }) {
     setExpression(prev => prev.slice(0, -1));
   };
 
-  const endGame = (finalScores) => {
-    const finalElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+  // Bank the current player's elapsed turn time into their accumulated total
+  const bankCurrentTurnTime = (playerIdx, accTime) => {
+    const spent = Math.floor((Date.now() - turnStartRef.current) / 1000);
+    const updated = [...accTime];
+    updated[playerIdx] = (updated[playerIdx] || 0) + spent;
+    return updated;
+  };
+
+  const endGame = (finalScores, finalAccTime, finalElapsed) => {
     playGameOver();
-    setFinalStats({ scores: finalScores, time: finalElapsed, mode: config.mode });
+    // Compute per-player penalties for summary screen
+    const penalties = config.mode === 'single'
+      ? [Math.floor(finalElapsed / 10)]
+      : finalAccTime.map(t => Math.floor(t / 10));
+    setFinalStats({
+      scores: finalScores,
+      penalties,
+      time: finalElapsed,
+      mode: config.mode,
+      numPlayers: config.numPlayers,
+    });
     setScreen('summary');
   };
 
@@ -73,24 +116,46 @@ export default function Game({ config, setScreen, setFinalStats }) {
     }
 
     if (config.mode === 'single') {
-      if (currentRound + 1 >= MAX_ROUNDS_SINGLE) {
-        setTimeout(() => endGame(nextScores), solved ? 800 : 0);
+      const nextRound = currentRound + 1;
+      if (nextRound >= MAX_ROUNDS) {
+        const finalElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+        setTimeout(() => endGame(nextScores, [], finalElapsed), solved ? 800 : 0);
       } else {
         setScores(nextScores);
-        setCurrentRound(r => r + 1);
+        setCurrentRound(nextRound);
         setTimeout(() => loadNewPuzzle(), solved ? 600 : 0);
       }
     } else {
-      setScores(nextScores);
-      setCurrentPlayerIdx((currentPlayerIdx + 1) % config.numPlayers);
+      // Multiplayer: bank current player's time
+      const updatedAccTime = bankCurrentTurnTime(currentPlayerIdx, playerAccTime);
+      setPlayerAccTime(updatedAccTime);
+
+      const nextPlayerIdx = (currentPlayerIdx + 1) % config.numPlayers;
+
       if (skipped) {
+        // Same puzzle, doubled points, next player
         setMultiplier(prev => prev * 2);
         setExpression([]);
-        showToast('Passed to Player ' + (((currentPlayerIdx + 1) % config.numPlayers) + 1));
+        setScores(nextScores);
+        setCurrentPlayerIdx(nextPlayerIdx);
+        showToast('Passed to Player ' + (nextPlayerIdx + 1));
       } else {
+        // Puzzle resolved — count a round for the "originating" player
+        // (whichever player first received this puzzle, i.e. currentRound % numPlayers)
+        // Simpler: just count total shared rounds; game ends when currentRound+1 >= MAX_ROUNDS * numPlayers
+        const nextRound = currentRound + 1;
         setMultiplier(1);
-        setCurrentRound(r => r + 1);
-        setTimeout(() => loadNewPuzzle(), solved ? 600 : 0);
+        setScores(nextScores);
+        setCurrentPlayerIdx(nextPlayerIdx);
+        setCurrentRound(nextRound);
+
+        // Check if every player has had MAX_ROUNDS rounds
+        if (nextRound >= MAX_ROUNDS * config.numPlayers) {
+          const finalElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+          setTimeout(() => endGame(nextScores, updatedAccTime, finalElapsed), solved ? 800 : 0);
+        } else {
+          setTimeout(() => loadNewPuzzle(), solved ? 600 : 0);
+        }
       }
     }
   };
@@ -115,6 +180,10 @@ export default function Game({ config, setScreen, setFinalStats }) {
 
   const isUsed = (idx) => expression.some(ex => ex.type === 'number' && ex.index === idx);
 
+  // For the top bar round display in multiplayer — show per-player round count
+  const sharedRoundDisplay = `Round ${currentRound + 1}/${MAX_ROUNDS * config.numPlayers}`;
+  const singleRoundDisplay = `Round ${currentRound + 1}/${MAX_ROUNDS}`;
+
   return (
     <div className="screen" style={{ padding: '0.75rem', gap: '0.5rem' }}>
       {toast && (
@@ -127,25 +196,29 @@ export default function Game({ config, setScreen, setFinalStats }) {
       <div className="top-bar" style={{ marginBottom: 0 }}>
         {config.mode === 'single' ? (
           <>
-            <div>Round {currentRound + 1}/{MAX_ROUNDS_SINGLE}</div>
+            <div>{singleRoundDisplay}</div>
             <div className="score-badge">Score: {scores[0]}</div>
           </>
         ) : (
           <>
-            <div style={{ color: 'var(--color-primary-dark)' }}>Player {currentPlayerIdx + 1}'s Turn</div>
-            <div className="score-badge">{scores[currentPlayerIdx]}pts {multiplier > 1 ? `×${multiplier}` : ''}</div>
+            <div style={{ color: 'var(--color-primary-dark)' }}>
+              Player {currentPlayerIdx + 1} — {sharedRoundDisplay}
+            </div>
+            <div className="score-badge">
+              {scores[currentPlayerIdx]}pts {multiplier > 1 ? `×${multiplier}` : ''}
+            </div>
           </>
         )}
       </div>
 
-      {/* Single-player penalty ticker */}
+      {/* Penalty ticker — single player */}
       {config.mode === 'single' && (
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          background: currentPenalty > 0 ? '#fee2e2' : '#f1f5f9',
-          border: `3px solid ${currentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
+          background: singlePenalty > 0 ? '#fee2e2' : '#f1f5f9',
+          border: `3px solid ${singlePenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
           borderRadius: 'var(--radius-md)',
           padding: '0.4rem 0.75rem',
           fontSize: '0.95rem',
@@ -153,8 +226,29 @@ export default function Game({ config, setScreen, setFinalStats }) {
           transition: 'background 0.4s, border-color 0.4s',
         }}>
           <span>⏱ Time: {elapsedSeconds}s</span>
-          <span style={{ color: currentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)' }}>
-            Penalty: −{currentPenalty} pts
+          <span style={{ color: singlePenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)' }}>
+            Penalty: −{singlePenalty} pts
+          </span>
+        </div>
+      )}
+
+      {/* Penalty ticker — multiplayer (current player only) */}
+      {config.mode === 'multi' && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: multiCurrentPenalty > 0 ? '#fee2e2' : '#f1f5f9',
+          border: `3px solid ${multiCurrentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
+          borderRadius: 'var(--radius-md)',
+          padding: '0.4rem 0.75rem',
+          fontSize: '0.95rem',
+          fontWeight: 'bold',
+          transition: 'background 0.4s, border-color 0.4s',
+        }}>
+          <span>⏱ P{currentPlayerIdx + 1} time: {multiCurrentPlayerTotalSecs}s</span>
+          <span style={{ color: multiCurrentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)' }}>
+            Penalty: −{multiCurrentPenalty} pts
           </span>
         </div>
       )}
@@ -202,7 +296,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
           )}
         </div>
 
-        {/* UNDO + SUBMIT side by side (CLEAR removed) */}
+        {/* UNDO + SUBMIT */}
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             className="btn btn-danger"

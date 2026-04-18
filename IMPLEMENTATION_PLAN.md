@@ -50,17 +50,20 @@ Menu → Setup → Game → Summary → Menu (loop)
 ## Game Modes
 
 ### Single Player
-- 20 rounds per session
+- 10 rounds per session
 - 10 points per correct answer
 - Time penalty at the end: subtract `floor(totalSeconds / 10)` from score
 - Player may skip any round (no penalty, no points)
 
 ### Multiplayer (2–4 players, hot-seat)
+- 10 rounds per player per session (total rounds = 10 × numPlayers)
 - Players take turns on the same device
 - Each correct answer: **10 × multiplier** points
 - If a player skips, the **same puzzle** is passed to the next player with **doubled points** (2×, 4×, 8×...)
 - On a correct solve after a skip chain, points reset to 1×
-- Leaderboard shown at end of session
+- **Time penalty tracked separately per player** — only the current player's elapsed time and penalty is shown during their turn
+- Each player's penalty = `floor(totalTurnSeconds / 10)`, deducted from their score at the end
+- Leaderboard shows base score, penalty, and net score per player
 
 ---
 
@@ -71,6 +74,8 @@ Menu → Setup → Game → Summary → Menu (loop)
 | Easy       | 4         |
 | Medium     | 5         |
 | Hard       | 6         |
+
+> **Session length:** 10 rounds (single) · 10 rounds per player (multiplayer)
 
 ---
 
