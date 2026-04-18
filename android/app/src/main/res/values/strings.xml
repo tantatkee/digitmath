@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">DigitMath</string>
+    <string name="title_activity_main">DigitMath</string>
+    <string name="package_name">com.example.digitmath</string>
+    <string name="custom_url_scheme">com.example.digitmath</string>
+</resources>
