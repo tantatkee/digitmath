@@ -10,10 +10,22 @@ export default function Game({ config, setScreen, setFinalStats }) {
   const [scores, setScores] = useState(Array(config.numPlayers).fill(0));
   const [multiplier, setMultiplier] = useState(1);
   const [sessionStartTime] = useState(Date.now());
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   const [puzzleDigits, setPuzzleDigits] = useState([]);
   const [expression, setExpression] = useState([]);
   const [toast, setToast] = useState(null);
+
+  // Timer — updates every second
+  useEffect(() => {
+    if (config.mode !== 'single') return;
+    const interval = setInterval(() => {
+      setElapsedSeconds(Math.floor((Date.now() - sessionStartTime) / 1000));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [config.mode, sessionStartTime]);
+
+  const currentPenalty = Math.floor(elapsedSeconds / 10);
 
   const loadNewPuzzle = useCallback(() => {
     const digits = generatePuzzle(config.difficulty);
@@ -44,16 +56,10 @@ export default function Game({ config, setScreen, setFinalStats }) {
     setExpression(prev => prev.slice(0, -1));
   };
 
-  const clear = () => {
-    if (expression.length === 0) return;
-    playUndo();
-    setExpression([]);
-  };
-
   const endGame = (finalScores) => {
-    const elapsedSeconds = Math.floor((Date.now() - sessionStartTime) / 1000);
+    const finalElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
     playGameOver();
-    setFinalStats({ scores: finalScores, time: elapsedSeconds, mode: config.mode });
+    setFinalStats({ scores: finalScores, time: finalElapsed, mode: config.mode });
     setScreen('summary');
   };
 
@@ -79,7 +85,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
       setCurrentPlayerIdx((currentPlayerIdx + 1) % config.numPlayers);
       if (skipped) {
         setMultiplier(prev => prev * 2);
-        clear();
+        setExpression([]);
         showToast('Passed to Player ' + (((currentPlayerIdx + 1) % config.numPlayers) + 1));
       } else {
         setMultiplier(1);
@@ -117,6 +123,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
         </div>
       )}
 
+      {/* Top bar: round + score */}
       <div className="top-bar" style={{ marginBottom: 0 }}>
         {config.mode === 'single' ? (
           <>
@@ -131,6 +138,28 @@ export default function Game({ config, setScreen, setFinalStats }) {
         )}
       </div>
 
+      {/* Single-player penalty ticker */}
+      {config.mode === 'single' && (
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          background: currentPenalty > 0 ? '#fee2e2' : '#f1f5f9',
+          border: `3px solid ${currentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
+          borderRadius: 'var(--radius-md)',
+          padding: '0.4rem 0.75rem',
+          fontSize: '0.95rem',
+          fontWeight: 'bold',
+          transition: 'background 0.4s, border-color 0.4s',
+        }}>
+          <span>⏱ Time: {elapsedSeconds}s</span>
+          <span style={{ color: currentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)' }}>
+            Penalty: −{currentPenalty} pts
+          </span>
+        </div>
+      )}
+
+      {/* Multiplayer all-scores bar */}
       {config.mode === 'multi' && (
         <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '0.9rem' }}>
           {scores.map((s, i) => `P${i + 1}: ${s}`).join(' | ')}
@@ -145,15 +174,25 @@ export default function Game({ config, setScreen, setFinalStats }) {
           Build an Equation!
         </h3>
 
-        {/* Equation display */}
-        <div className="equation-display" style={{ minHeight: '56px', padding: '0.5rem', marginBottom: 0 }}>
+        {/* Equation display — fixed height to prevent layout shifts */}
+        <div className="equation-display" style={{
+          height: '64px',
+          minHeight: 'unset',
+          padding: '0.4rem 0.75rem',
+          marginBottom: 0,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          flexWrap: 'nowrap',
+          justifyContent: expression.length === 0 ? 'center' : 'flex-start',
+        }}>
           {expression.length === 0 ? (
             <span style={{ color: '#ccc', fontSize: '1rem' }}>Tap blocks below to build...</span>
           ) : (
             expression.map((item, i) => (
               <span key={i} className="equation-item" style={{
                 fontSize: '1.8rem',
-                padding: '0.1rem 0.5rem',
+                padding: '0.05rem 0.45rem',
+                flexShrink: 0,
                 borderColor: item.type === 'op' ? 'var(--color-secondary)' : 'var(--color-border)',
                 color: item.type === 'op' ? 'var(--color-secondary-dark)' : 'var(--color-text)'
               }}>
@@ -163,7 +202,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
           )}
         </div>
 
-        {/* Undo / Clear */}
+        {/* UNDO + SUBMIT side by side (CLEAR removed) */}
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             className="btn btn-danger"
@@ -172,11 +211,10 @@ export default function Game({ config, setScreen, setFinalStats }) {
             disabled={expression.length === 0}
           >UNDO</button>
           <button
-            className="btn btn-secondary"
+            className="btn btn-success"
             style={{ flex: 1, padding: '0.6rem', fontSize: '1rem', marginBottom: 0, width: 'auto' }}
-            onClick={clear}
-            disabled={expression.length === 0}
-          >CLEAR</button>
+            onClick={handleCheck}
+          >SUBMIT ✓</button>
         </div>
 
         {/* Number digit blocks */}
@@ -214,20 +252,13 @@ export default function Game({ config, setScreen, setFinalStats }) {
           })}
         </div>
 
-        {/* Submit & Skip */}
-        <button
-          className="btn btn-success"
-          onClick={handleCheck}
-          style={{ padding: '0.8rem', fontSize: '1.5rem', marginBottom: 0 }}
-        >
-          SUBMIT ✓
-        </button>
+        {/* Skip */}
         <button
           className="btn"
           onClick={handleSkip}
           style={{
             backgroundColor: '#94a3b8', boxShadow: '0 6px 0 0 #64748b',
-            padding: '0.6rem', fontSize: '1.1rem', marginBottom: 0
+            padding: '0.6rem', fontSize: '1.1rem', marginBottom: 0, marginTop: 'auto'
           }}
         >
           {config.mode === 'multi' ? '⏭ SKIP TO NEXT PLAYER' : '⏭ SKIP ROUND'}
