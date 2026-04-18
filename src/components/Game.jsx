@@ -7,8 +7,6 @@ const MAX_ROUNDS = 10; // per session (single) or per player (multi)
 export default function Game({ config, setScreen, setFinalStats }) {
   const [currentRound, setCurrentRound] = useState(0);
   const [currentPlayerIdx, setCurrentPlayerIdx] = useState(0);
-  // playerRounds tracks how many rounds each player has completed
-  const [playerRounds, setPlayerRounds] = useState(Array(config.numPlayers).fill(0));
   const [scores, setScores] = useState(Array(config.numPlayers).fill(0));
   const [multiplier, setMultiplier] = useState(1);
 
@@ -16,19 +14,19 @@ export default function Game({ config, setScreen, setFinalStats }) {
   const [sessionStartTime] = useState(Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
-  // Multiplayer: track accumulated time (seconds) per player
-  // playerAccTime stores banked seconds from completed turns
+  // Multiplayer: accumulated time (seconds) banked from completed turns
   const [playerAccTime, setPlayerAccTime] = useState(Array(config.numPlayers).fill(0));
-  // turnStartTime is a ref so it doesn't cause re-renders
   const turnStartRef = useRef(Date.now());
-  // Live ticker for current player's current-turn seconds
+  const pauseOffsetRef = useRef(0);  // milliseconds paused during this turn
+  const pauseStartRef = useRef(null); // when the current pause began
   const [turnElapsed, setTurnElapsed] = useState(0);
 
   const [puzzleDigits, setPuzzleDigits] = useState([]);
   const [expression, setExpression] = useState([]);
   const [toast, setToast] = useState(null);
+  const [isAbortDialogOpen, setIsAbortDialogOpen] = useState(false);
 
-  // Single player timer
+  // Single player timer (unaffected — abort is multiplayer only)
   useEffect(() => {
     if (config.mode !== 'single') return;
     const interval = setInterval(() => {
@@ -37,13 +35,17 @@ export default function Game({ config, setScreen, setFinalStats }) {
     return () => clearInterval(interval);
   }, [config.mode, sessionStartTime]);
 
-  // Multiplayer turn timer
+  // Multiplayer turn timer — respects pause offset
   useEffect(() => {
     if (config.mode !== 'multi') return;
     turnStartRef.current = Date.now();
+    pauseOffsetRef.current = 0;
+    pauseStartRef.current = null;
     setTurnElapsed(0);
     const interval = setInterval(() => {
-      setTurnElapsed(Math.floor((Date.now() - turnStartRef.current) / 1000));
+      const paused = pauseOffsetRef.current +
+        (pauseStartRef.current ? Date.now() - pauseStartRef.current : 0);
+      setTurnElapsed(Math.floor((Date.now() - turnStartRef.current - paused) / 1000));
     }, 1000);
     return () => clearInterval(interval);
   }, [config.mode, currentPlayerIdx]);
@@ -82,9 +84,11 @@ export default function Game({ config, setScreen, setFinalStats }) {
     setExpression(prev => prev.slice(0, -1));
   };
 
-  // Bank the current player's elapsed turn time into their accumulated total
+  // Bank current player's elapsed turn time into their accumulated total
   const bankCurrentTurnTime = (playerIdx, accTime) => {
-    const spent = Math.floor((Date.now() - turnStartRef.current) / 1000);
+    const paused = pauseOffsetRef.current +
+      (pauseStartRef.current ? Date.now() - pauseStartRef.current : 0);
+    const spent = Math.floor((Date.now() - turnStartRef.current - paused) / 1000);
     const updated = [...accTime];
     updated[playerIdx] = (updated[playerIdx] || 0) + spent;
     return updated;
@@ -92,7 +96,6 @@ export default function Game({ config, setScreen, setFinalStats }) {
 
   const endGame = (finalScores, finalAccTime, finalElapsed) => {
     playGameOver();
-    // Compute per-player penalties for summary screen
     const penalties = config.mode === 'single'
       ? [Math.floor(finalElapsed / 10)]
       : finalAccTime.map(t => Math.floor(t / 10));
@@ -126,30 +129,22 @@ export default function Game({ config, setScreen, setFinalStats }) {
         setTimeout(() => loadNewPuzzle(), solved ? 600 : 0);
       }
     } else {
-      // Multiplayer: bank current player's time
       const updatedAccTime = bankCurrentTurnTime(currentPlayerIdx, playerAccTime);
       setPlayerAccTime(updatedAccTime);
-
       const nextPlayerIdx = (currentPlayerIdx + 1) % config.numPlayers;
 
       if (skipped) {
-        // Same puzzle, doubled points, next player
         setMultiplier(prev => prev * 2);
         setExpression([]);
         setScores(nextScores);
         setCurrentPlayerIdx(nextPlayerIdx);
         showToast('Passed to Player ' + (nextPlayerIdx + 1));
       } else {
-        // Puzzle resolved — count a round for the "originating" player
-        // (whichever player first received this puzzle, i.e. currentRound % numPlayers)
-        // Simpler: just count total shared rounds; game ends when currentRound+1 >= MAX_ROUNDS * numPlayers
         const nextRound = currentRound + 1;
         setMultiplier(1);
         setScores(nextScores);
         setCurrentPlayerIdx(nextPlayerIdx);
         setCurrentRound(nextRound);
-
-        // Check if every player has had MAX_ROUNDS rounds
         if (nextRound >= MAX_ROUNDS * config.numPlayers) {
           const finalElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
           setTimeout(() => endGame(nextScores, updatedAccTime, finalElapsed), solved ? 800 : 0);
@@ -178,21 +173,80 @@ export default function Game({ config, setScreen, setFinalStats }) {
     nextTurn(false, true);
   };
 
+  // Abort dialog: pause the timer when it opens, unpause on cancel
+  const openAbortDialog = () => {
+    pauseStartRef.current = Date.now();
+    setIsAbortDialogOpen(true);
+  };
+
+  const cancelAbort = () => {
+    // Bank the paused duration so it's not counted as turn time
+    if (pauseStartRef.current) {
+      pauseOffsetRef.current += Date.now() - pauseStartRef.current;
+      pauseStartRef.current = null;
+    }
+    setIsAbortDialogOpen(false);
+  };
+
+  const confirmAbort = () => {
+    setIsAbortDialogOpen(false);
+    setScreen('menu');
+  };
+
   const isUsed = (idx) => expression.some(ex => ex.type === 'number' && ex.index === idx);
 
-  // For the top bar round display in multiplayer — show per-player round count
   const sharedRoundDisplay = `Round ${currentRound + 1}/${MAX_ROUNDS * config.numPlayers}`;
   const singleRoundDisplay = `Round ${currentRound + 1}/${MAX_ROUNDS}`;
 
   return (
-    <div className="screen" style={{ padding: '0.75rem', gap: '0.5rem' }}>
+    <div className="screen" style={{ padding: '0.75rem', gap: '0.5rem', position: 'relative' }}>
+
+      {/* Abort confirmation overlay */}
+      {isAbortDialogOpen && (
+        <div style={{
+          position: 'absolute', inset: 0, zIndex: 200,
+          background: 'rgba(15, 23, 42, 0.75)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          borderRadius: '0',
+          padding: '2rem',
+        }}>
+          <div style={{
+            background: 'white', borderRadius: 'var(--radius-xl)',
+            padding: '2rem', textAlign: 'center', width: '100%', maxWidth: '340px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.4)',
+          }}>
+            <div style={{ fontSize: '3rem', marginBottom: '0.5rem' }}>⛔</div>
+            <h2 style={{ fontSize: '1.6rem', marginBottom: '0.75rem' }}>Abort Game?</h2>
+            <p style={{ fontSize: '1rem', color: '#64748b', marginBottom: '1.5rem', lineHeight: 1.5 }}>
+              This will end the session for all players. Current scores will be lost.
+            </p>
+            <div style={{ display: 'flex', gap: '0.75rem' }}>
+              <button
+                className="btn btn-danger"
+                style={{ flex: 1, marginBottom: 0, fontSize: '1.1rem', padding: '0.75rem' }}
+                onClick={confirmAbort}
+              >
+                Yes, Abort
+              </button>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1, marginBottom: 0, fontSize: '1.1rem', padding: '0.75rem' }}
+                onClick={cancelAbort}
+              >
+                Keep Playing
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {toast && (
         <div className={`toast ${toast.isSuccess ? 'success' : ''}`}>
           {toast.msg}
         </div>
       )}
 
-      {/* Top bar: round + score */}
+      {/* Top bar */}
       <div className="top-bar" style={{ marginBottom: 0 }}>
         {config.mode === 'single' ? (
           <>
@@ -202,7 +256,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
         ) : (
           <>
             <div style={{ color: 'var(--color-primary-dark)' }}>
-              Player {currentPlayerIdx + 1} — {sharedRoundDisplay}
+              P{currentPlayerIdx + 1} — {sharedRoundDisplay}
             </div>
             <div className="score-badge">
               {scores[currentPlayerIdx]}pts {multiplier > 1 ? `×${multiplier}` : ''}
@@ -214,16 +268,11 @@ export default function Game({ config, setScreen, setFinalStats }) {
       {/* Penalty ticker — single player */}
       {config.mode === 'single' && (
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           background: singlePenalty > 0 ? '#fee2e2' : '#f1f5f9',
           border: `3px solid ${singlePenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
-          borderRadius: 'var(--radius-md)',
-          padding: '0.4rem 0.75rem',
-          fontSize: '0.95rem',
-          fontWeight: 'bold',
-          transition: 'background 0.4s, border-color 0.4s',
+          borderRadius: 'var(--radius-md)', padding: '0.4rem 0.75rem',
+          fontSize: '0.95rem', fontWeight: 'bold', transition: 'background 0.4s, border-color 0.4s',
         }}>
           <span>⏱ Time: {elapsedSeconds}s</span>
           <span style={{ color: singlePenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)' }}>
@@ -235,18 +284,13 @@ export default function Game({ config, setScreen, setFinalStats }) {
       {/* Penalty ticker — multiplayer (current player only) */}
       {config.mode === 'multi' && (
         <div style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
           background: multiCurrentPenalty > 0 ? '#fee2e2' : '#f1f5f9',
           border: `3px solid ${multiCurrentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)'}`,
-          borderRadius: 'var(--radius-md)',
-          padding: '0.4rem 0.75rem',
-          fontSize: '0.95rem',
-          fontWeight: 'bold',
-          transition: 'background 0.4s, border-color 0.4s',
+          borderRadius: 'var(--radius-md)', padding: '0.4rem 0.75rem',
+          fontSize: '0.95rem', fontWeight: 'bold', transition: 'background 0.4s, border-color 0.4s',
         }}>
-          <span>⏱ P{currentPlayerIdx + 1} time: {multiCurrentPlayerTotalSecs}s</span>
+          <span>⏱ P{currentPlayerIdx + 1}: {multiCurrentPlayerTotalSecs}s</span>
           <span style={{ color: multiCurrentPenalty > 0 ? 'var(--color-danger)' : 'var(--color-border)' }}>
             Penalty: −{multiCurrentPenalty} pts
           </span>
@@ -262,21 +306,16 @@ export default function Game({ config, setScreen, setFinalStats }) {
 
       <div className="card" style={{
         flex: 1, display: 'flex', flexDirection: 'column', gap: '0.5rem',
-        padding: '0.75rem', overflow: 'hidden'
+        padding: '0.75rem', overflow: 'hidden',
       }}>
         <h3 style={{ textAlign: 'center', fontSize: '1.1rem', color: 'var(--color-text)', marginBottom: 0 }}>
           Build an Equation!
         </h3>
 
-        {/* Equation display — fixed height to prevent layout shifts */}
+        {/* Equation display — fixed height */}
         <div className="equation-display" style={{
-          height: '64px',
-          minHeight: 'unset',
-          padding: '0.4rem 0.75rem',
-          marginBottom: 0,
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          flexWrap: 'nowrap',
+          height: '64px', minHeight: 'unset', padding: '0.4rem 0.75rem', marginBottom: 0,
+          overflowX: 'auto', overflowY: 'hidden', flexWrap: 'nowrap',
           justifyContent: expression.length === 0 ? 'center' : 'flex-start',
         }}>
           {expression.length === 0 ? (
@@ -284,11 +323,9 @@ export default function Game({ config, setScreen, setFinalStats }) {
           ) : (
             expression.map((item, i) => (
               <span key={i} className="equation-item" style={{
-                fontSize: '1.8rem',
-                padding: '0.05rem 0.45rem',
-                flexShrink: 0,
+                fontSize: '1.8rem', padding: '0.05rem 0.45rem', flexShrink: 0,
                 borderColor: item.type === 'op' ? 'var(--color-secondary)' : 'var(--color-border)',
-                color: item.type === 'op' ? 'var(--color-secondary-dark)' : 'var(--color-text)'
+                color: item.type === 'op' ? 'var(--color-secondary-dark)' : 'var(--color-text)',
               }}>
                 {item.val}
               </span>
@@ -301,8 +338,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
           <button
             className="btn btn-danger"
             style={{ flex: 1, padding: '0.6rem', fontSize: '1rem', marginBottom: 0, width: 'auto' }}
-            onClick={undo}
-            disabled={expression.length === 0}
+            onClick={undo} disabled={expression.length === 0}
           >UNDO</button>
           <button
             className="btn btn-success"
@@ -322,9 +358,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
                 style={{ opacity: used ? 0.3 : 1, fontSize: '1.8rem', minWidth: '52px', padding: '0.6rem' }}
                 onClick={() => handleBlockClick('number', digit, i)}
                 disabled={used}
-              >
-                {digit}
-              </button>
+              >{digit}</button>
             );
           })}
         </div>
@@ -339,24 +373,36 @@ export default function Game({ config, setScreen, setFinalStats }) {
                 className="btn btn-block btn-secondary"
                 style={{ fontSize: '1.8rem', minWidth: '52px', padding: '0.6rem' }}
                 onClick={() => handleBlockClick('op', rawOp)}
-              >
-                {op}
-              </button>
+              >{op}</button>
             );
           })}
         </div>
 
-        {/* Skip */}
-        <button
-          className="btn"
-          onClick={handleSkip}
-          style={{
-            backgroundColor: '#94a3b8', boxShadow: '0 6px 0 0 #64748b',
-            padding: '0.6rem', fontSize: '1.1rem', marginBottom: 0, marginTop: 'auto'
-          }}
-        >
-          {config.mode === 'multi' ? '⏭ SKIP TO NEXT PLAYER' : '⏭ SKIP ROUND'}
-        </button>
+        {/* Bottom action row: SKIP + ABORT (multi) or just SKIP (single) */}
+        <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
+          <button
+            className="btn"
+            onClick={handleSkip}
+            style={{
+              flex: config.mode === 'multi' ? 1 : undefined,
+              width: config.mode === 'single' ? '100%' : 'auto',
+              backgroundColor: '#94a3b8', boxShadow: '0 6px 0 0 #64748b',
+              padding: '0.6rem', fontSize: '1rem', marginBottom: 0,
+            }}
+          >
+            {config.mode === 'multi' ? '⏭ SKIP' : '⏭ SKIP ROUND'}
+          </button>
+
+          {config.mode === 'multi' && (
+            <button
+              className="btn btn-danger"
+              style={{ flex: 1, padding: '0.6rem', fontSize: '1rem', marginBottom: 0, width: 'auto' }}
+              onClick={openAbortDialog}
+            >
+              ✕ ABORT
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
