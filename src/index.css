@@ -43,22 +43,26 @@ body {
   background: linear-gradient(135deg, var(--color-bg-start), var(--color-bg-end));
   color: var(--color-text);
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   justify-content: center;
   align-items: center;
   overflow: hidden;
+  touch-action: none; /* Prevent browser scroll bounce */
 }
 
 /* App Container (Mobile Mockup / Full Screen) */
 #root {
   width: 100vw;
   height: 100vh;
+  height: 100dvh;
   max-width: 500px; /* clamp width for desktop */
   background-color: transparent;
   display: flex;
   flex-direction: column;
   position: relative;
   box-shadow: 0 0 20px rgba(0,0,0,0.1);
+  overflow: hidden;
 }
 
 /* Global Utilities */
