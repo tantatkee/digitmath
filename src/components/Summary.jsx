@@ -1,7 +1,7 @@
 import React from 'react';
 
 export default function Summary({ finalStats, setScreen }) {
-  const { mode, scores, penalties, time, numPlayers } = finalStats;
+  const { mode, scores, penalties, time } = finalStats;
   const isSingle = mode === 'single';
 
   // Net score = raw points - individual penalty

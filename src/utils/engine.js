@@ -2,10 +2,9 @@ export function evaluateExpression(exprStr) {
   try {
     // Only allow numbers and basic operators to avoid any security issue
     if (!/^[0-9+\-*/() .]+$/.test(exprStr)) return NaN;
-    // eslint-disable-next-line no-new-func
     const result = new Function(`return ${exprStr}`)();
     return result;
-  } catch (e) {
+  } catch {
     return NaN;
   }
 }
@@ -153,7 +152,7 @@ export function verifyUserExpression(exprArray, availableDigits) {
     } else {
       return { valid: false, message: "Mathematically incorrect." };
     }
-  } catch(e) {
+  } catch {
     return { valid: false, message: "Malformed expression." };
   }
 }

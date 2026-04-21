@@ -59,7 +59,6 @@ export function playUndo() {
  * Correct answer sound — cheerful ascending arpeggio
  */
 export function playCorrect() {
-  const ctx = getCtx();
   const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
   notes.forEach((freq, i) => {
     setTimeout(() => playTone(freq, 0.18, 'sine', 0.4), i * 90);

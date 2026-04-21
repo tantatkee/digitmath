@@ -8,20 +8,20 @@ export default function Game({ config, setScreen, setFinalStats }) {
   const [currentRound, setCurrentRound] = useState(0);
   const [currentPlayerIdx, setCurrentPlayerIdx] = useState(0);
   const [scores, setScores] = useState(Array(config.numPlayers).fill(0));
-  const [multiplier, setMultiplier] = useState(1);
+  const [bonusPoints, setBonusPoints] = useState(0);
 
   // Single player: track total session elapsed
-  const [sessionStartTime] = useState(Date.now());
+  const [sessionStartTime] = useState(() => Date.now());
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // Multiplayer: accumulated time (seconds) banked from completed turns
   const [playerAccTime, setPlayerAccTime] = useState(Array(config.numPlayers).fill(0));
-  const turnStartRef = useRef(Date.now());
+  const turnStartRef = useRef(null);
   const pauseOffsetRef = useRef(0);  // milliseconds paused during this turn
   const pauseStartRef = useRef(null); // when the current pause began
   const [turnElapsed, setTurnElapsed] = useState(0);
 
-  const [puzzleDigits, setPuzzleDigits] = useState([]);
+  const [puzzleDigits, setPuzzleDigits] = useState(() => generatePuzzle(config.difficulty));
   const [expression, setExpression] = useState([]);
   const [toast, setToast] = useState(null);
   const [isAbortDialogOpen, setIsAbortDialogOpen] = useState(false);
@@ -38,14 +38,20 @@ export default function Game({ config, setScreen, setFinalStats }) {
   // Multiplayer turn timer — respects pause offset
   useEffect(() => {
     if (config.mode !== 'multi') return;
+    
+    // Initialize or reset turn start
     turnStartRef.current = Date.now();
     pauseOffsetRef.current = 0;
     pauseStartRef.current = null;
-    setTurnElapsed(0);
+    
+    // Defer reset to avoid synchronous setState in effect warning
+    queueMicrotask(() => setTurnElapsed(0));
+
     const interval = setInterval(() => {
+      const start = turnStartRef.current || Date.now();
       const paused = pauseOffsetRef.current +
         (pauseStartRef.current ? Date.now() - pauseStartRef.current : 0);
-      setTurnElapsed(Math.floor((Date.now() - turnStartRef.current - paused) / 1000));
+      setTurnElapsed(Math.floor((Date.now() - start - paused) / 1000));
     }, 1000);
     return () => clearInterval(interval);
   }, [config.mode, currentPlayerIdx]);
@@ -53,7 +59,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
   // Derived penalties
   const singlePenalty = Math.floor(elapsedSeconds / 600);
   const multiCurrentPlayerTotalSecs = (playerAccTime[currentPlayerIdx] || 0) + turnElapsed;
-  const multiCurrentPenalty = Math.floor(multiCurrentPlayerTotalSecs / 10);
+  const multiCurrentPenalty = Math.floor(multiCurrentPlayerTotalSecs / 30);
 
   const loadNewPuzzle = useCallback(() => {
     const digits = generatePuzzle(config.difficulty);
@@ -61,9 +67,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
     setExpression([]);
   }, [config.difficulty]);
 
-  useEffect(() => {
-    loadNewPuzzle();
-  }, [loadNewPuzzle]);
+  // We no longer need the mount-only useEffect for loadNewPuzzle as we initialize it in useState
 
   const showToast = (msg, isSuccess = false) => {
     setToast({ msg, isSuccess });
@@ -98,7 +102,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
     playGameOver();
     const penalties = config.mode === 'single'
       ? [Math.floor(finalElapsed / 600)]
-      : finalAccTime.map(t => Math.floor(t / 10));
+      : finalAccTime.map(t => Math.floor(t / 30));
     setFinalStats({
       scores: finalScores,
       penalties,
@@ -113,7 +117,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
     let nextScores = [...scores];
 
     if (solved) {
-      nextScores[currentPlayerIdx] += 10 * multiplier;
+      nextScores[currentPlayerIdx] += 10 + bonusPoints;
       playCorrect();
       showToast('Correct! 🎉', true);
     }
@@ -134,14 +138,14 @@ export default function Game({ config, setScreen, setFinalStats }) {
       const nextPlayerIdx = (currentPlayerIdx + 1) % config.numPlayers;
 
       if (skipped) {
-        setMultiplier(prev => prev * 2);
+        setBonusPoints(prev => prev + 1);
         setExpression([]);
         setScores(nextScores);
         setCurrentPlayerIdx(nextPlayerIdx);
         showToast('Passed to Player ' + (nextPlayerIdx + 1));
       } else {
         const nextRound = currentRound + 1;
-        setMultiplier(1);
+        setBonusPoints(0);
         setScores(nextScores);
         setCurrentPlayerIdx(nextPlayerIdx);
         setCurrentRound(nextRound);
@@ -259,7 +263,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
               P{currentPlayerIdx + 1} — {sharedRoundDisplay}
             </div>
             <div className="score-badge">
-              {scores[currentPlayerIdx]}pts {multiplier > 1 ? `×${multiplier}` : ''}
+              {scores[currentPlayerIdx]}pts {bonusPoints > 0 ? `(+${bonusPoints})` : ''}
             </div>
           </>
         )}
