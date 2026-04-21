@@ -51,7 +51,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
   }, [config.mode, currentPlayerIdx]);
 
   // Derived penalties
-  const singlePenalty = Math.floor(elapsedSeconds / 10);
+  const singlePenalty = Math.floor(elapsedSeconds / 600);
   const multiCurrentPlayerTotalSecs = (playerAccTime[currentPlayerIdx] || 0) + turnElapsed;
   const multiCurrentPenalty = Math.floor(multiCurrentPlayerTotalSecs / 10);
 
@@ -97,7 +97,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
   const endGame = (finalScores, finalAccTime, finalElapsed) => {
     playGameOver();
     const penalties = config.mode === 'single'
-      ? [Math.floor(finalElapsed / 10)]
+      ? [Math.floor(finalElapsed / 600)]
       : finalAccTime.map(t => Math.floor(t / 10));
     setFinalStats({
       scores: finalScores,
