@@ -21,10 +21,10 @@ export default function Menu({ setScreen }) {
             
             <div style={{ textAlign: 'left', fontSize: '1rem', lineHeight: '1.4', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
               <p>1. You are given 4, 5, or 6 <b>numbers</b>.</p>
-              <p>2. Use <b>ALL</b> numbers and any <b>operators</b> (+, −, ×, ÷) to build an equation.</p>
-              <p>3. Your equation must have exactly one <b>=</b> sign (e.g., <code>7 - 4 = 6 ÷ 2</code>).</p>
-              <p>4. <b>Single Player:</b> 10 rounds. Very small time penalty if you take over 10 minutes!</p>
-              <p>5. <b>Multiplayer:</b> Take turns! If you skip, the next player gets <b>Double Points</b>.</p>
+              <p>2. Use <b>ALL</b> numbers and any <b>operators</b> (+, −, ×, ÷, (, )) to build an equation.</p>
+              <p>3. Your equation must have exactly one <b>=</b> sign (e.g., <code>(7 - 4) × 2 = 6</code>).</p>
+              <p>4. <b>Single Player:</b> 10 rounds. Watch out for the time penalty!</p>
+              <p>5. <b>Multiplayer:</b> Take turns! If you skip, the next player gets a <b>Bonus Point</b>.</p>
             </div>
 
             <button 

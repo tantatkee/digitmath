@@ -2,7 +2,7 @@
 
 ## Overview
 
-DigitMath is a mobile-first math equation-building game targeting elementary and middle school children. Players are given N single-digit numbers (where N = 4, 5, or 6 depending on difficulty) and must form a valid mathematical equation using all the numbers and any arithmetic operators (+, −, ×, ÷).
+DigitMath is a mobile-first math equation-building game targeting elementary and middle school children. Players are given N single-digit numbers (where N = 4, 5, or 6 depending on difficulty) and must form a valid mathematical equation using all the numbers and any arithmetic operators (+, −, ×, ÷, (, )).
 
 The app is built with **Vite + React** for the web UI and **Capacitor** for wrapping it as a native Android and iOS app.
 

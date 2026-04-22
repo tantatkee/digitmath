@@ -318,8 +318,8 @@ export default function Game({ config, setScreen, setFinalStats }) {
 
         {/* Equation display — fixed height */}
         <div className="equation-display" style={{
-          height: '64px', minHeight: 'unset', padding: '0.4rem 0.75rem', marginBottom: 0,
-          overflowX: 'auto', overflowY: 'hidden', flexWrap: 'nowrap',
+          height: '110px', minHeight: 'unset', padding: '0.4rem 0.75rem', marginBottom: 0,
+          overflowX: 'hidden', overflowY: 'auto', flexWrap: 'wrap',
           justifyContent: expression.length === 0 ? 'center' : 'flex-start',
         }}>
           {expression.length === 0 ? (
@@ -369,27 +369,26 @@ export default function Game({ config, setScreen, setFinalStats }) {
 
         {/* Operator blocks */}
         <div className="block-row" style={{ marginBottom: 0 }}>
-          {['+', '-', '×', '÷', '='].map((op, idx) => {
-            const rawOp = ['+', '-', '*', '/', '='][idx];
+          {['+', '-', '×', '÷', '(', ')', '='].map((op, idx) => {
+            const rawOp = ['+', '-', '*', '/', '(', ')', '='][idx];
             return (
               <button
                 key={op}
                 className="btn btn-block btn-secondary"
-                style={{ fontSize: '1.8rem', minWidth: '52px', padding: '0.6rem' }}
+                style={{ fontSize: '1.8rem', minWidth: '46px', padding: '0.6rem' }}
                 onClick={() => handleBlockClick('op', rawOp)}
               >{op}</button>
             );
           })}
         </div>
 
-        {/* Bottom action row: SKIP + ABORT (multi) or just SKIP (single) */}
+        {/* Bottom action row: SKIP + ABORT */}
         <div style={{ display: 'flex', gap: '0.5rem', marginTop: 'auto' }}>
           <button
             className="btn"
             onClick={handleSkip}
             style={{
-              flex: config.mode === 'multi' ? 1 : undefined,
-              width: config.mode === 'single' ? '100%' : 'auto',
+              flex: 1,
               backgroundColor: '#94a3b8', boxShadow: '0 6px 0 0 #64748b',
               padding: '0.6rem', fontSize: '1rem', marginBottom: 0,
             }}
@@ -397,15 +396,13 @@ export default function Game({ config, setScreen, setFinalStats }) {
             {config.mode === 'multi' ? '⏭ SKIP' : '⏭ SKIP ROUND'}
           </button>
 
-          {config.mode === 'multi' && (
-            <button
-              className="btn btn-danger"
-              style={{ flex: 1, padding: '0.6rem', fontSize: '1rem', marginBottom: 0, width: 'auto' }}
-              onClick={openAbortDialog}
-            >
-              ✕ ABORT
-            </button>
-          )}
+          <button
+            className="btn btn-danger"
+            style={{ flex: 1, padding: '0.6rem', fontSize: '1rem', marginBottom: 0, width: 'auto' }}
+            onClick={openAbortDialog}
+          >
+            ✕ ABORT
+          </button>
         </div>
       </div>
     </div>

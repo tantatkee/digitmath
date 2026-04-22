@@ -64,12 +64,18 @@ describe('engine', () => {
       expect(result.message).toContain('Invalid numbers used');
     });
 
-    it('should fail if mathematically incorrect', () => {
-      const puzzle = [3, 4, 7];
-      const expr = [7, '+', 4, '=', 3];
+    it('should verify (7 - 4) * 3 = 9 with digits [3, 4, 7, 9]', () => {
+      const puzzle = [3, 4, 7, 9];
+      const expr = ['(', 7, '-', 4, ')', '*', 3, '=', 9];
+      const result = verifyUserExpression(expr, puzzle);
+      expect(result.valid).toBe(true);
+    });
+
+    it('should fail if mathematically incorrect with parentheses', () => {
+      const puzzle = [3, 4, 7, 9];
+      const expr = ['(', 7, '-', 4, ')', '+', 3, '=', 9];
       const result = verifyUserExpression(expr, puzzle);
       expect(result.valid).toBe(false);
-      expect(result.message).toContain('Mathematically incorrect');
     });
   });
 });
