@@ -97,16 +97,16 @@ Xcode will open the project. Select your device and click **Run ▶**.
 ### Single Player
 - 10 rounds per session
 - **+10 points** for each correct equation
-- **Time penalty** at the end: `floor(total seconds / 10)` subtracted from your score
+- **Time penalty** at the end: `floor(total seconds / 600)` subtracted from your score (1 point per 10 mins)
 - You can **Skip** any round (no penalty, no points)
 
 ### Multiplayer (2–4 players)
 - 10 rounds per player per session (players alternate; total rounds = 10 × players)
 - Players take hot-seat turns on the same device
-- **+10 × multiplier** points per correct answer
-- If a player **Skips**, the same puzzle passes to the next player with **doubled points** (2×, 4×, ...)
+- **+10 + bonus** points per correct answer
+- If a player **Skips**, the same puzzle passes to the next player with an additional **+1 bonus point**
 - **Time penalty tracked individually** — the penalty ticker shows only the current player's accumulated time during their turn
-- Each player's penalty = `floor(their total turn seconds / 10)`, deducted from their score at the end
+- Each player's penalty = `floor(their total turn seconds / 30)`, deducted from their score at the end (1 point per 30s)
 - Leaderboard shows base score, penalty, and **net score** per player
 
 ### Difficulty

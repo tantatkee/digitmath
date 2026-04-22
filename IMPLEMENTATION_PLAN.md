@@ -52,17 +52,17 @@ Menu → Setup → Game → Summary → Menu (loop)
 ### Single Player
 - 10 rounds per session
 - 10 points per correct answer
-- Time penalty at the end: subtract `floor(totalSeconds / 10)` from score
+- Time penalty at the end: subtract `floor(totalSeconds / 600)` from score (1 point per 10 minutes)
 - Player may skip any round (no penalty, no points)
 
 ### Multiplayer (2–4 players, hot-seat)
 - 10 rounds per player per session (total rounds = 10 × numPlayers)
 - Players take turns on the same device
-- Each correct answer: **10 × multiplier** points
-- If a player skips, the **same puzzle** is passed to the next player with **doubled points** (2×, 4×, 8×...)
-- On a correct solve after a skip chain, points reset to 1×
+- Each correct answer: **10 + bonus** points
+- If a player skips, the **same puzzle** is passed to the next player with an additional **+1 bonus point** per skip
+- On a correct solve after a skip chain, the bonus resets to 0
 - **Time penalty tracked separately per player** — only the current player's elapsed time and penalty is shown during their turn
-- Each player's penalty = `floor(totalTurnSeconds / 10)`, deducted from their score at the end
+- Each player's penalty = `floor(totalTurnSeconds / 30)`, deducted from their score at the end (1 point per 30 seconds)
 - Leaderboard shows base score, penalty, and net score per player
 
 ---
