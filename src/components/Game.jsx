@@ -336,9 +336,13 @@ export default function Game({ config, setScreen, setFinalStats }) {
           ) : (
             expression.map((item, i) => (
               <span key={i} className="equation-item" style={{
-                fontSize: '1.8rem', padding: '0.05rem 0.45rem', flexShrink: 0,
+                fontSize: '1.8rem', padding: (item.val === '(' || item.val === ')') ? '0.05rem 0.2rem' : '0.05rem 0.45rem', flexShrink: 0,
                 borderColor: item.type === 'op' ? 'var(--color-secondary)' : 'var(--color-border)',
-                color: item.type === 'op' ? 'var(--color-secondary-dark)' : 'var(--color-text)',
+                color: 'var(--color-text)',
+                minWidth: (item.val === '(' || item.val === ')') ? '20px' : 'unset',
+                textAlign: 'center',
+                fontFamily: (item.val === '(' || item.val === ')') ? 'sans-serif' : 'inherit',
+                fontWeight: (item.val === '(' || item.val === ')') ? '500' : '700'
               }}>
                 {item.val}
               </span>
@@ -380,11 +384,18 @@ export default function Game({ config, setScreen, setFinalStats }) {
         <div className="block-row" style={{ marginBottom: 0 }}>
           {['+', '-', '×', '÷', '(', ')', '='].map((op, idx) => {
             const rawOp = ['+', '-', '*', '/', '(', ')', '='][idx];
+            const isParen = op === '(' || op === ')';
             return (
               <button
                 key={op}
                 className="btn btn-block btn-secondary"
-                style={{ fontSize: '1.8rem', minWidth: '46px', padding: '0.6rem' }}
+                style={{ 
+                  fontSize: '1.8rem', 
+                  minWidth: isParen ? '32px' : '46px', 
+                  padding: isParen ? '0.6rem 0.2rem' : '0.6rem',
+                  fontFamily: isParen ? 'sans-serif' : 'inherit',
+                  fontWeight: isParen ? '500' : '600'
+                }}
                 onClick={() => handleBlockClick('op', rawOp)}
               >{op}</button>
             );
