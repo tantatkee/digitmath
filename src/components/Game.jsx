@@ -26,14 +26,23 @@ export default function Game({ config, setScreen, setFinalStats }) {
   const [toast, setToast] = useState(null);
   const [isAbortDialogOpen, setIsAbortDialogOpen] = useState(false);
 
-  // Single player timer (unaffected — abort is multiplayer only)
+  // Single player timer — respects pause offset
   useEffect(() => {
     if (config.mode !== 'single') return;
     const interval = setInterval(() => {
-      setElapsedSeconds(Math.floor((Date.now() - sessionStartTime) / 1000));
+      const paused = pauseOffsetRef.current +
+        (pauseStartRef.current ? Date.now() - pauseStartRef.current : 0);
+      setElapsedSeconds(Math.floor((Date.now() - sessionStartTime - paused) / 1000));
     }, 1000);
     return () => clearInterval(interval);
   }, [config.mode, sessionStartTime]);
+
+  // Helper to get total net elapsed session time (minus pauses)
+  const getNetSessionTime = () => {
+    const paused = pauseOffsetRef.current +
+      (pauseStartRef.current ? Date.now() - pauseStartRef.current : 0);
+    return Math.floor((Date.now() - sessionStartTime - paused) / 1000);
+  };
 
   // Multiplayer turn timer — respects pause offset
   useEffect(() => {
@@ -125,7 +134,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
     if (config.mode === 'single') {
       const nextRound = currentRound + 1;
       if (nextRound >= MAX_ROUNDS) {
-        const finalElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+        const finalElapsed = getNetSessionTime();
         setTimeout(() => endGame(nextScores, [], finalElapsed), solved ? 800 : 0);
       } else {
         setScores(nextScores);
@@ -150,7 +159,7 @@ export default function Game({ config, setScreen, setFinalStats }) {
         setCurrentPlayerIdx(nextPlayerIdx);
         setCurrentRound(nextRound);
         if (nextRound >= MAX_ROUNDS * config.numPlayers) {
-          const finalElapsed = Math.floor((Date.now() - sessionStartTime) / 1000);
+          const finalElapsed = getNetSessionTime();
           setTimeout(() => endGame(nextScores, updatedAccTime, finalElapsed), solved ? 800 : 0);
         } else {
           setTimeout(() => loadNewPuzzle(), solved ? 600 : 0);
